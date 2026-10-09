@@ -2,7 +2,6 @@
 	single linked list merge
 	This problem requires you to merge two ordered singly linked lists into one ordered singly linked list
 */
-// I AM NOT DONE
 
 use std::fmt::{self, Display, Formatter};
 use std::ptr::NonNull;
@@ -29,13 +28,13 @@ struct LinkedList<T> {
     end: Option<NonNull<Node<T>>>,
 }
 
-impl<T> Default for LinkedList<T> {
+impl<T: Ord> Default for LinkedList<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> LinkedList<T> {
+impl<T: Ord> LinkedList<T> {
     pub fn new() -> Self {
         Self {
             length: 0,
@@ -69,14 +68,41 @@ impl<T> LinkedList<T> {
             },
         }
     }
-	pub fn merge(list_a:LinkedList<T>,list_b:LinkedList<T>) -> Self
-	{
-		//TODO
-		Self {
-            length: 0,
-            start: None,
-            end: None,
-        }
+	pub fn merge(list_a: LinkedList<T>, list_b: LinkedList<T>) -> Self {
+		let mut merged = Self::new();
+
+		let mut a = list_a.start;
+		let mut b = list_b.start;
+
+		// Both input lists are already ordered; repeatedly take the smaller head.
+		while a.is_some() || b.is_some() {
+			let take_a = match (a, b) {
+				(Some(pa), Some(pb)) => unsafe {
+					(*pa.as_ptr()).val <= (*pb.as_ptr()).val
+				},
+				(Some(_), None) => true,
+				(None, Some(_)) => false,
+				(None, None) => unreachable!(),
+			};
+
+			if take_a {
+				let pa = a.unwrap();
+				a = unsafe { (*pa.as_ptr()).next };
+				merged.add(unsafe { std::ptr::read(&(*pa.as_ptr()).val) });
+			} else {
+				let pb = b.unwrap();
+				b = unsafe { (*pb.as_ptr()).next };
+				merged.add(unsafe { std::ptr::read(&(*pb.as_ptr()).val) });
+			}
+		}
+
+		// The nodes were copied out; release the original allocations.
+		unsafe {
+			free_list(list_a.start);
+			free_list(list_b.start);
+		}
+
+		merged
 	}
 }
 
@@ -101,6 +127,16 @@ where
             Some(node) => write!(f, "{}, {}", self.val, unsafe { node.as_ref() }),
             None => write!(f, "{}", self.val),
         }
+    }
+}
+
+/// Reclaim every `Box<Node<T>>` still reachable from `head`.
+unsafe fn free_list<T>(head: Option<NonNull<Node<T>>>) {
+    let mut cur = head;
+    while let Some(ptr) = cur {
+        let next = (*ptr.as_ptr()).next;
+        drop(Box::from_raw(ptr.as_ptr()));
+        cur = next;
     }
 }
 
